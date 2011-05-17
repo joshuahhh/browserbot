@@ -1,0 +1,1 @@
+redis-cli smembers tcrawl:users_crawled | sed 's/\"\(.*\)\"/\1/' | xargs -I {} sh -c "redis-cli smembers tcrawl:users:{}:followers | wc -l" | sort -n | cat -n

@@ -1,0 +1,12 @@
+{
+   "background_page": "background.html",
+   "browser_action": {
+      "default_icon": "icon_robot.png",
+      "default_title": "Browserbot: the future of EVERYTHING"
+   },
+   "minimum_chrome_version": "6",
+   "name": "Browserbot",
+   "permissions": [ "http://*/*" ],
+   "update_url": "http://clients2.google.com/service/update2/crx",
+   "version": "0.0"
+}

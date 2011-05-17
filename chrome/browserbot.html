@@ -1,0 +1,197 @@
+<html>
+<head>
+<script type="text/javascript" src="http://code.jquery.com/jquery-1.4.4.js"></script>
+<script type="text/javascript" src="log4javascript_uncompressed.js"></script>
+<script type="text/javascript">
+var log = log4javascript.getLogger();
+var gridCells = {};
+var lastRowTime = (new Date).getTime();
+var ticks = {};
+
+var browserbotMaster = "http://joshuah.scripts.mit.edu/browserbot/browserbot.fcgi";
+
+var go = true;
+
+var requests_per_min = {}
+
+$(document).ready(function () {
+    // stuff for logging:
+    var appender = new log4javascript.InPageAppender("logging", false, false, true, "100%", "100%");
+    appender.addEventListener("load", function(sender, eventType, eventArgs) {
+        $("#logging iframe").contents().find("#search").remove();
+    });
+    appender.setShowCommandLine(false);
+    log.addAppender(appender);
+
+    $.ajaxSetup({
+        timeout: 5000
+    });
+
+    makeRequestToMaster("A");
+    makeRequestToMaster("B");
+    makeRequestToMaster("C");
+    makeRequestToMaster("D");
+    makeRequestToMaster("E");
+    makeRequestToMaster("F");
+    makeRequestToMaster("G");
+    makeRequestToMaster("H");
+    makeRequestToMaster("I");
+    makeRequestToMaster("J");
+});
+
+function stopRequests() {
+  go = false;
+};
+
+function makeRequestToMaster(label) {
+    tick(label);
+    if (!go) return;
+    $.ajax({type: "GET",
+            url: browserbotMaster,
+            data: {action: "getRequest"},
+            success: function(data, textStatus, jqXHR) {
+                processResponseFromMaster(label, data, textStatus, jqXHR)
+            },
+            error: function(xhr, status) {
+                log.error(label + " error from talking to master (retrying) - " + status);            
+                setTimeout(function() {
+                    makeRequestToMaster(label);
+                }, 2000);
+            }
+          });
+};
+
+function processResponseFromMaster(label, data, textStatus, jqXHR) {
+    time = tick(label);
+    // "http" thing is TOTAL HACK to get rid of inexplicable \u000 nonsense
+    // PLEASE MAKE IT SUCK LESS
+    if(data.token && data.token != "" && data.url && data.url.substr(0, 4) == "http") {
+        log.info(label + " " + time + " getRequest back from jstrawl! data = " + JSON.stringify(data));
+        token = data.token;
+        url = data.url;
+        addCell(label, url);
+        makeRequestToExternal(label, url, token);
+    } else {
+        log.warn(label + " " + time + " getRequest back from jstrawl! data = " + JSON.stringify(data));
+        setTimeout(function() {
+            makeRequestToMaster(label);
+        }, 2000);
+    }
+}
+
+function makeRequestToExternal(label, url, token) {
+    $.ajax({type: "GET",
+	    url: url,
+	    success: function(data, textStatus, jqXHR) {
+            processResponseFromExternal(label, data, textStatus, jqXHR, url, token);
+	    },
+	    error: function(xhr, status) {
+            log.error(label + " error from talking to external (retrying) - " + status);
+            setTimeout(function () {
+                makeRequestToExternal(label, url, token);
+            }, 2000);
+	    }
+    });
+};
+
+function processResponseFromExternal(label, data, textStatus, jqXHR, url, token) {
+  time = tick(label);
+  getCell(label).css("background-color", "yellow");
+  log.info(label + " " + time + " data = " + escape(data).substring(0,100));
+  deliverResultToMaster(label, data, token);
+};
+
+function deliverResultToMaster(label, data, token) {
+   $.ajax({type: "POST",
+            url: browserbotMaster,
+            data: {action: "postResponse",
+                   token: token,
+                   result: JSON.stringify(data),
+                   another: 1},
+            success: function(data, textStatus, jqXHR) {
+                time = tick(label);
+		        getCell(label).css("background-color", "green");
+                log.info(label + " " + time + " result sent to server successfully! response = " + JSON.stringify(data));
+                //makeRequestToMaster(label);
+                processResponseFromMaster(label, data, textStatus, jqXHR);
+            },
+            error: function(xhr, status) {
+                log.error(label + " result sent to server UNSUCCESSFULLY...");
+                log.error("(status is " + status + ")");
+                log.error("(text is " + xhr.responseText + ")");
+                deliverResultToMaster(label, data, token);
+            }
+          });
+}
+
+
+function addCell(label, url) {
+    lastRow = $("#grid tr:last");
+    if (lastRow.length == 0 || lastRow.find("td").length == 10) {
+        now = (new Date).getTime();
+        lastRow.append("<td class='timecell'>" + (now - lastRowTime)/1000 + "</td>");
+        lastRowTime = now;
+        $("#grid").append("<tr/>")
+        lastRow = $("#grid tr:last");
+    }
+    lastRow.append("<td class='gridcell' title='" + url + "'>" + label + "</td>");
+    gridCells[label] = $("#grid td:last");
+    
+}
+
+function getCell(label) {
+    return gridCells[label];
+    // return $("#grid td:last");
+}
+
+function tick(label) {
+    now = (new Date).getTime();
+    toReturn = 0;
+    if (ticks[label]) {
+        toReturn = (now - ticks[label])/1000;
+    }
+    ticks[label] = now;
+    return toReturn;
+}
+
+</script>
+<style type="text/css">
+    html,body,#framing {
+        margin:0;
+        padding:0;
+        height:100%;
+        border:none
+    }
+    
+    #framing {
+        margin: 0 auto;
+        text-align: left;
+        vertical-align: top;
+        width: 100%;
+        background-color:white;
+    }
+
+    .gridcell {
+        width: 10px;
+        height: 10px;
+        background-color: lightgray;
+        color: white;
+        font-weight: bold;
+        font-family: sans-serif;
+    }
+</style>
+</head>
+<body style="background-color:azure">
+<!--<h1 style="font-family:sans-serif;font-style:italic; font-size:45pt;display: inline;">browserbot</h1>-->
+<table id="framing">
+<tr>
+<td style="width:300px;vertical-align: top;padding:10px; overflow:scroll">
+<a onclick="stopRequests()" href="#">PANIC SWITCH</a></br>
+<table id="grid"></table>
+</td>
+<td id="logging">
+</td>
+</tr>
+</table>
+</body>
+</html>
